@@ -5,6 +5,9 @@
 #include <cctype>
 #include <iostream>
 #include <cmath>
+#include <queue>
+#include <climits>
+#include <numeric>
 
 // String processing functions
 std::string Lib::readUntilSevenDots(const std::string& filename) {
@@ -582,4 +585,692 @@ int Lib::longestIncreasingSubsequence(const std::vector<int>& nums) {
     }
     
     return maxLen;
+}
+
+// Graph Flow Algorithms
+
+// Helper function for Ford-Fulkerson and Edmonds-Karp
+bool Lib::bfs(std::vector<std::vector<int>>& residualGraph, int s, int t, std::vector<int>& parent) {
+    int n = residualGraph.size();
+    std::vector<bool> visited(n, false);
+    std::queue<int> q;
+    
+    q.push(s);
+    visited[s] = true;
+    parent[s] = -1;
+    
+    while (!q.empty()) {
+        int u = q.front();
+        q.pop();
+        
+        for (int v = 0; v < n; v++) {
+            if (!visited[v] && residualGraph[u][v] > 0) {
+                if (v == t) {
+                    parent[v] = u;
+                    return true;
+                }
+                q.push(v);
+                parent[v] = u;
+                visited[v] = true;
+            }
+        }
+    }
+    return false;
+}
+
+int Lib::fordFulkerson(std::vector<std::vector<int>>& graph, int source, int sink) {
+    int n = graph.size();
+    std::vector<std::vector<int>> residualGraph = graph;
+    std::vector<int> parent(n);
+    int maxFlow = 0;
+    
+    // Augment the flow while there is a path from source to sink
+    while (bfs(residualGraph, source, sink, parent)) {
+        // Find the maximum flow through the path found
+        int pathFlow = INT_MAX;
+        for (int v = sink; v != source; v = parent[v]) {
+            int u = parent[v];
+            pathFlow = std::min(pathFlow, residualGraph[u][v]);
+        }
+        
+        // Update residual capacities of the edges and reverse edges
+        for (int v = sink; v != source; v = parent[v]) {
+            int u = parent[v];
+            residualGraph[u][v] -= pathFlow;
+            residualGraph[v][u] += pathFlow;
+        }
+        
+        maxFlow += pathFlow;
+    }
+    
+    return maxFlow;
+}
+
+int Lib::edmondsKarp(std::vector<std::vector<int>>& graph, int source, int sink) {
+    // Edmonds-Karp is Ford-Fulkerson with BFS for finding augmenting paths
+    // The implementation is already using BFS in the helper function
+    return fordFulkerson(graph, source, sink);
+}
+
+bool Lib::dinicBfs(const std::vector<std::vector<int>>& residualGraph, std::vector<int>& level, int s, int t) {
+    int n = residualGraph.size();
+    std::fill(level.begin(), level.end(), -1);
+    level[s] = 0;
+    
+    std::queue<int> q;
+    q.push(s);
+    
+    while (!q.empty()) {
+        int u = q.front();
+        q.pop();
+        
+        for (int v = 0; v < n; v++) {
+            if (level[v] < 0 && residualGraph[u][v] > 0) {
+                level[v] = level[u] + 1;
+                q.push(v);
+            }
+        }
+    }
+    
+    return level[t] >= 0;
+}
+
+int Lib::dinicDfs(std::vector<std::vector<int>>& residualGraph, std::vector<int>& level, 
+                 std::vector<int>& ptr, int u, int t, int flow) {
+    if (u == t)
+        return flow;
+    
+    int n = residualGraph.size();
+    for (int& i = ptr[u]; i < n; i++) {
+        int v = i;
+        if (level[v] == level[u] + 1 && residualGraph[u][v] > 0) {
+            int curr_flow = std::min(flow, residualGraph[u][v]);
+            int temp_flow = dinicDfs(residualGraph, level, ptr, v, t, curr_flow);
+            
+            if (temp_flow > 0) {
+                residualGraph[u][v] -= temp_flow;
+                residualGraph[v][u] += temp_flow;
+                return temp_flow;
+            }
+        }
+    }
+    
+    return 0;
+}
+
+int Lib::dinic(std::vector<std::vector<int>>& graph, int source, int sink) {
+    int n = graph.size();
+    std::vector<std::vector<int>> residualGraph = graph;
+    std::vector<int> level(n);
+    std::vector<int> ptr(n);
+    int maxFlow = 0;
+    
+    while (dinicBfs(residualGraph, level, source, sink)) {
+        std::fill(ptr.begin(), ptr.end(), 0);
+        while (int flow = dinicDfs(residualGraph, level, ptr, source, sink, INT_MAX))
+            maxFlow += flow;
+    }
+    
+    return maxFlow;
+}
+
+// Union-Find Data Structure
+Lib::DisjointSet::DisjointSet(int n) {
+    parent.resize(n);
+    rank.resize(n, 0);
+    for (int i = 0; i < n; i++)
+        parent[i] = i;
+}
+
+int Lib::DisjointSet::find(int x) {
+    if (parent[x] != x)
+        parent[x] = find(parent[x]);
+    return parent[x];
+}
+
+void Lib::DisjointSet::unionSets(int x, int y) {
+    int rootX = find(x);
+    int rootY = find(y);
+    
+    if (rootX == rootY)
+        return;
+    
+    if (rank[rootX] < rank[rootY])
+        parent[rootX] = rootY;
+    else if (rank[rootX] > rank[rootY])
+        parent[rootY] = rootX;
+    else {
+        parent[rootY] = rootX;
+        rank[rootX]++;
+    }
+}
+
+// Kruskal's algorithm for MST
+std::vector<std::pair<int, std::pair<int, int>>> Lib::kruskal(
+    std::vector<std::pair<int, std::pair<int, int>>>& edges, int vertices) {
+    
+    std::sort(edges.begin(), edges.end()); // Sort edges by weight
+    DisjointSet ds(vertices);
+    std::vector<std::pair<int, std::pair<int, int>>> result;
+    
+    for (auto& edge : edges) {
+        int weight = edge.first;
+        int u = edge.second.first;
+        int v = edge.second.second;
+        
+        if (ds.find(u) != ds.find(v)) {
+            result.push_back(edge);
+            ds.unionSets(u, v);
+        }
+    }
+    
+    return result;
+}
+
+// Prim's algorithm for MST
+std::vector<std::pair<int, int>> Lib::prim(std::vector<std::vector<std::pair<int, int>>>& graph, int start) {
+    int n = graph.size();
+    std::vector<bool> visited(n, false);
+    std::vector<int> key(n, INT_MAX);
+    std::vector<int> parent(n, -1);
+    
+    // Use priority queue to find minimum weight edge
+    std::priority_queue<std::pair<int, int>, std::vector<std::pair<int, int>>, 
+                       std::greater<std::pair<int, int>>> pq;
+    
+    // Start with vertex 'start'
+    key[start] = 0;
+    pq.push({0, start});
+    
+    while (!pq.empty()) {
+        int u = pq.top().second;
+        pq.pop();
+        
+        if (visited[u])
+            continue;
+        
+        visited[u] = true;
+        
+        for (auto& neighbor : graph[u]) {
+            int v = neighbor.first;
+            int weight = neighbor.second;
+            
+            if (!visited[v] && weight < key[v]) {
+                key[v] = weight;
+                parent[v] = u;
+                pq.push({key[v], v});
+            }
+        }
+    }
+    
+    // Construct the MST edges
+    std::vector<std::pair<int, int>> result;
+    for (int i = 0; i < n; i++) {
+        if (i != start && parent[i] != -1) {
+            result.push_back({parent[i], i});
+        }
+    }
+    
+    return result;
+}
+
+// Number Theory Functions
+bool Lib::isPrimeNaive(int n) {
+    if (n <= 1)
+        return false;
+    if (n <= 3)
+        return true;
+    if (n % 2 == 0 || n % 3 == 0)
+        return false;
+    
+    for (int i = 5; i * i <= n; i += 6) {
+        if (n % i == 0 || n % (i + 2) == 0)
+            return false;
+    }
+    
+    return true;
+}
+
+bool Lib::isPrimeOptimized(int n) {
+    if (n <= 1)
+        return false;
+    if (n <= 3)
+        return true;
+    if (n % 2 == 0 || n % 3 == 0)
+        return false;
+    
+    // Check using 6k ± 1 optimization
+    for (int i = 5; i * i <= n; i += 6) {
+        if (n % i == 0 || n % (i + 2) == 0)
+            return false;
+    }
+    
+    return true;
+}
+
+// Modular multiplicative inverse using Extended Euclidean Algorithm
+long long Lib::modInverse(long long a, long long m) {
+    long long m0 = m;
+    long long y = 0, x = 1;
+    
+    if (m == 1)
+        return 0;
+    
+    while (a > 1) {
+        long long q = a / m;
+        long long t = m;
+        
+        m = a % m;
+        a = t;
+        t = y;
+        
+        y = x - q * y;
+        x = t;
+    }
+    
+    if (x < 0)
+        x += m0;
+    
+    return x;
+}
+
+// Binomial Coefficient (analytical approach)
+long long Lib::binomialCoefficient(int n, int k) {
+    if (k < 0 || k > n)
+        return 0;
+    if (k == 0 || k == n)
+        return 1;
+    
+    // C(n, k) = C(n, n-k)
+    if (k > n - k)
+        k = n - k;
+    
+    long long res = 1;
+    
+    // Calculate [n * (n-1) * ... * (n-k+1)] / [k * (k-1) * ... * 1]
+    for (int i = 0; i < k; ++i) {
+        res *= (n - i);
+        res /= (i + 1);
+    }
+    
+    return res;
+}
+
+// Binomial Coefficient (DP approach)
+long long Lib::binomialCoefficientDP(int n, int k) {
+    std::vector<std::vector<long long>> C(n + 1, std::vector<long long>(k + 1, 0));
+    
+    // Base cases
+    for (int i = 0; i <= n; i++) {
+        for (int j = 0; j <= std::min(i, k); j++) {
+            if (j == 0 || j == i)
+                C[i][j] = 1;
+            else
+                C[i][j] = C[i - 1][j - 1] + C[i - 1][j];
+        }
+    }
+    
+    return C[n][k];
+}
+
+// String Matching Algorithms
+std::vector<int> Lib::computeLPS(const std::string& pattern) {
+    int m = pattern.length();
+    std::vector<int> lps(m, 0);
+    
+    int len = 0;
+    int i = 1;
+    
+    while (i < m) {
+        if (pattern[i] == pattern[len]) {
+            len++;
+            lps[i] = len;
+            i++;
+        } else {
+            if (len != 0) {
+                len = lps[len - 1];
+            } else {
+                lps[i] = 0;
+                i++;
+            }
+        }
+    }
+    
+    return lps;
+}
+
+std::vector<int> Lib::kmp(const std::string& text, const std::string& pattern) {
+    int n = text.length();
+    int m = pattern.length();
+    std::vector<int> matches;
+    
+    if (m == 0 || m > n)
+        return matches;
+    
+    // Preprocess pattern to get longest prefix suffix array
+    std::vector<int> lps = computeLPS(pattern);
+    
+    int i = 0; // Index for text[]
+    int j = 0; // Index for pattern[]
+    
+    while (i < n) {
+        if (pattern[j] == text[i]) {
+            i++;
+            j++;
+        }
+        
+        if (j == m) {
+            matches.push_back(i - j); // Found a match
+            j = lps[j - 1];
+        } else if (i < n && pattern[j] != text[i]) {
+            if (j != 0)
+                j = lps[j - 1];
+            else
+                i++;
+        }
+    }
+    
+    return matches;
+}
+
+std::vector<int> Lib::buildBadCharTable(const std::string& pattern) {
+    int m = pattern.length();
+    std::vector<int> badChar(256, -1);
+    
+    for (int i = 0; i < m; i++)
+        badChar[pattern[i]] = i;
+    
+    return badChar;
+}
+
+std::vector<int> Lib::buildGoodSuffixTable(const std::string& pattern) {
+    int m = pattern.length();
+    std::vector<int> shift(m, 0);
+    std::vector<int> border(m, 0);
+    
+    // Preprocessing for case 2
+    int j = m;
+    border[m - 1] = j;
+    
+    for (int i = m - 2; i >= 0; i--) {
+        while (j < m && pattern[i] != pattern[j - 1])
+            j = border[j];
+        
+        j--;
+        border[i] = j;
+    }
+    
+    // Preprocessing for case 1
+    for (int i = 0; i < m; i++)
+        shift[i] = m;
+    
+    j = 0;
+    for (int i = m - 1; i >= 0; i--) {
+        if (border[i] == i + 1) {
+            while (j < m - 1 - i)
+                shift[j++] = m - 1 - i;
+        }
+    }
+    
+    for (int i = 0; i <= m - 2; i++)
+        shift[m - 1 - border[i]] = m - 1 - i;
+    
+    return shift;
+}
+
+std::vector<int> Lib::boyerMoore(const std::string& text, const std::string& pattern) {
+    int n = text.length();
+    int m = pattern.length();
+    std::vector<int> matches;
+    
+    if (m == 0 || m > n)
+        return matches;
+    
+    // Preprocess pattern
+    std::vector<int> badChar = buildBadCharTable(pattern);
+    std::vector<int> goodSuffix = buildGoodSuffixTable(pattern);
+    
+    int s = 0; // Shift of the pattern relative to text
+    
+    while (s <= n - m) {
+        int j = m - 1;
+        
+        // Match pattern from right to left
+        while (j >= 0 && pattern[j] == text[s + j])
+            j--;
+        
+        if (j < 0) {
+            matches.push_back(s); // Pattern found at position s
+            s += (s + m < n) ? m - badChar[text[s + m]] : 1;
+        } else {
+            // Bad Character heuristic
+            int badCharShift = j - badChar[text[s + j]];
+            if (badCharShift < 1) badCharShift = 1;
+            
+            // Good Suffix heuristic
+            int goodSuffixShift = goodSuffix[j];
+            
+            s += std::max(badCharShift, goodSuffixShift);
+        }
+    }
+    
+    return matches;
+}
+
+std::vector<int> Lib::rabinKarp(const std::string& text, const std::string& pattern) {
+    int n = text.length();
+    int m = pattern.length();
+    std::vector<int> matches;
+    
+    if (m == 0 || m > n)
+        return matches;
+    
+    const int prime = 101; // A prime number
+    const int d = 256;     // Number of characters in the alphabet
+    
+    // Calculate hash for pattern and first window of text
+    int patternHash = 0;
+    int textHash = 0;
+    int h = 1;
+    
+    // Calculate h = pow(d, m-1) % prime
+    for (int i = 0; i < m - 1; i++)
+        h = (h * d) % prime;
+    
+    // Calculate hash value for pattern and first window of text
+    for (int i = 0; i < m; i++) {
+        patternHash = (d * patternHash + pattern[i]) % prime;
+        textHash = (d * textHash + text[i]) % prime;
+    }
+    
+    // Slide the pattern over text one by one
+    for (int i = 0; i <= n - m; i++) {
+        // Check if the hash values match
+        if (patternHash == textHash) {
+            // Check characters one by one
+            bool match = true;
+            for (int j = 0; j < m; j++) {
+                if (text[i + j] != pattern[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            
+            if (match)
+                matches.push_back(i);
+        }
+        
+        // Calculate hash value for next window of text
+        if (i < n - m) {
+            textHash = (d * (textHash - text[i] * h) + text[i + m]) % prime;
+            
+            // We might get negative hash, convert it to positive
+            if (textHash < 0)
+                textHash += prime;
+        }
+    }
+    
+    return matches;
+}
+
+// Fenwick Tree (Binary Indexed Tree) implementation
+Lib::FenwickTree::FenwickTree(int n) {
+    size = n;
+    bit.assign(n + 1, 0);
+}
+
+Lib::FenwickTree::FenwickTree(const std::vector<int>& arr) {
+    size = arr.size();
+    bit.assign(size + 1, 0);
+    
+    for (int i = 0; i < size; i++)
+        update(i, arr[i]);
+}
+
+void Lib::FenwickTree::update(int idx, int val) {
+    idx++; // 1-based indexing
+    while (idx <= size) {
+        bit[idx] += val;
+        idx += idx & -idx; // Add LSB
+    }
+}
+
+int Lib::FenwickTree::query(int idx) {
+    idx++; // 1-based indexing
+    int sum = 0;
+    while (idx > 0) {
+        sum += bit[idx];
+        idx -= idx & -idx; // Remove LSB
+    }
+    return sum;
+}
+
+int Lib::FenwickTree::rangeQuery(int l, int r) {
+    return query(r) - query(l - 1);
+}
+
+// Segment Tree implementation
+Lib::SegmentTree::SegmentTree(int n) {
+    size = n;
+    tree.assign(4 * n, 0);
+    lazy.assign(4 * n, 0);
+}
+
+Lib::SegmentTree::SegmentTree(const std::vector<int>& arr) {
+    size = arr.size();
+    tree.assign(4 * size, 0);
+    lazy.assign(4 * size, 0);
+    build(arr, 1, 0, size - 1);
+}
+
+void Lib::SegmentTree::build(const std::vector<int>& arr, int node, int start, int end) {
+    if (start == end) {
+        tree[node] = arr[start];
+        return;
+    }
+    
+    int mid = (start + end) / 2;
+    build(arr, 2 * node, start, mid);
+    build(arr, 2 * node + 1, mid + 1, end);
+    tree[node] = tree[2 * node] + tree[2 * node + 1]; // Sum query
+}
+
+void Lib::SegmentTree::propagate(int node, int start, int end) {
+    if (lazy[node] != 0) {
+        tree[node] += (end - start + 1) * lazy[node]; // Update node value
+        
+        if (start != end) {
+            lazy[2 * node] += lazy[node];     // Mark child as lazy
+            lazy[2 * node + 1] += lazy[node]; // Mark child as lazy
+        }
+        
+        lazy[node] = 0; // Reset lazy value
+    }
+}
+
+void Lib::SegmentTree::updatePoint(int node, int start, int end, int idx, int val) {
+    if (start == end) {
+        tree[node] = val;
+        return;
+    }
+    
+    int mid = (start + end) / 2;
+    if (idx <= mid)
+        updatePoint(2 * node, start, mid, idx, val);
+    else
+        updatePoint(2 * node + 1, mid + 1, end, idx, val);
+    
+    tree[node] = tree[2 * node] + tree[2 * node + 1]; // Sum query
+}
+
+void Lib::SegmentTree::updateRange(int node, int start, int end, int l, int r, int val) {
+    propagate(node, start, end);
+    
+    if (start > end || start > r || end < l)
+        return;
+    
+    if (start >= l && end <= r) {
+        tree[node] += (end - start + 1) * val;
+        
+        if (start != end) {
+            lazy[2 * node] += val;
+            lazy[2 * node + 1] += val;
+        }
+        
+        return;
+    }
+    
+    int mid = (start + end) / 2;
+    updateRange(2 * node, start, mid, l, r, val);
+    updateRange(2 * node + 1, mid + 1, end, l, r, val);
+    
+    tree[node] = tree[2 * node] + tree[2 * node + 1];
+}
+
+int Lib::SegmentTree::querySum(int node, int start, int end, int l, int r) {
+    if (start > end || start > r || end < l)
+        return 0;
+    
+    propagate(node, start, end);
+    
+    if (start >= l && end <= r)
+        return tree[node];
+    
+    int mid = (start + end) / 2;
+    int p1 = querySum(2 * node, start, mid, l, r);
+    int p2 = querySum(2 * node + 1, mid + 1, end, l, r);
+    
+    return p1 + p2;
+}
+
+int Lib::SegmentTree::queryMin(int node, int start, int end, int l, int r) {
+    if (start > end || start > r || end < l)
+        return INT_MAX;
+    
+    propagate(node, start, end);
+    
+    if (start >= l && end <= r)
+        return tree[node];
+    
+    int mid = (start + end) / 2;
+    int p1 = queryMin(2 * node, start, mid, l, r);
+    int p2 = queryMin(2 * node + 1, mid + 1, end, l, r);
+    
+    return std::min(p1, p2);
+}
+
+int Lib::SegmentTree::queryMax(int node, int start, int end, int l, int r) {
+    if (start > end || start > r || end < l)
+        return INT_MIN;
+    
+    propagate(node, start, end);
+    
+    if (start >= l && end <= r)
+        return tree[node];
+    
+    int mid = (start + end) / 2;
+    int p1 = queryMax(2 * node, start, mid, l, r);
+    int p2 = queryMax(2 * node + 1, mid + 1, end, l, r);
+    
+    return std::max(p1, p2);
 } 
